@@ -115,7 +115,9 @@ class MainActivity : Activity() {
             if (enabled) {
                 dpm.addUserRestriction(admin, UserManager.DISALLOW_INSTALL_APPS)
                 dpm.addUserRestriction(admin, UserManager.DISALLOW_UNINSTALL_APPS)
+                dpm.setUninstallBlocked(admin, packageName, true)
             } else {
+                dpm.setUninstallBlocked(admin, packageName, false)
                 dpm.clearUserRestriction(admin, UserManager.DISALLOW_INSTALL_APPS)
                 dpm.clearUserRestriction(admin, UserManager.DISALLOW_UNINSTALL_APPS)
             }
