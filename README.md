@@ -38,7 +38,7 @@ The signing key must be retained permanently to publish compatible app updates. 
 
 Device Owner provisioning is normally performed during initial setup on a new or factory-reset device. QR provisioning requires a public APK download URL and a matching SHA-256 checksum. A checksum mismatch can cause provisioning to fail and may require resetting the device.
 
-The current PIN is stored as a salted PBKDF2 hash in app preferences. This prototype does not yet provide a separately tested recovery credential or administrator recovery channel. If the PIN is lost while restrictions are enabled, the user may be unable to turn them off in the app. Therefore, **do not enable the global installation/uninstallation restrictions on a primary phone yet**.
+The app now generates a one-time 16-digit recovery code when the administrator PIN is first created. The code is displayed once; the app stores only a salted PBKDF2 hash. Entering the recovery code while Guardian is Device Owner attempts to turn all Guardian restrictions off, then clears the old credentials so a new PIN and recovery code can be created. This recovery path is newly added and has not yet been physically tested. Keep the recovery code offline and do not enable global restrictions on a primary phone until recovery has been tested on a spare device.
 
 ## Policies used
 
