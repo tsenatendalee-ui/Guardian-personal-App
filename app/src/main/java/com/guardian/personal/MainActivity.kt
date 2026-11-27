@@ -1,6 +1,7 @@
 package com.guardian.personal
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
@@ -52,7 +53,7 @@ class MainActivity : Activity() {
     private fun pinInput(hint: String): EditText = EditText(this).apply {
         this.hint = hint
         inputType =  android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
-        filters = arrayOf(android.text.InputFilter.LengthFilter(12))
+        filters = arrayOf(android.text.InputFilter.LengthFilter(20))
         body.addView(this, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
@@ -87,17 +88,35 @@ class MainActivity : Activity() {
                 if (a.length !in 6..12 || a.any { !it.isDigit() } || a != b) {
                     Toast.makeText(this, "Enter matching PINs of 6–12 digits.", Toast.LENGTH_LONG).show()
                 } else {
-                    savePin(a); Toast.makeText(this, "Administrator PIN saved.", Toast.LENGTH_SHORT).show(); render()
+                    val recoveryCode = savePin(a)
+                    AlertDialog.Builder(this)
+                        .setTitle("Save your recovery code")
+                        .setMessage("Write this 16-digit recovery code down and keep it somewhere secure and separate from your phone. It is shown only once. If you lose your administrator PIN, this code can turn protection off and let you create a new PIN.\n\n$recoveryCode")
+                        .setPositiveButton("I saved it") { _, _ ->
+                            Toast.makeText(this, "Administrator PIN saved.", Toast.LENGTH_SHORT).show()
+                            render()
+                        }
+                        .setCancelable(false)
+                        .show()
                 }
             }
         } else if (owner) {
             val pin = pinInput("Administrator PIN")
             button(if (prefs.getBoolean("protection_active", false)) "Turn protection OFF" else "Turn protection ON") {
-                if (!verifyPin(pin.text.toString())) {
-                    Toast.makeText(this, "Incorrect PIN.", Toast.LENGTH_SHORT).show()
+                val entered = pin.text.toString()
+                if (verifyPin(entered)) {
+                    if (setProtection(!prefs.getBoolean("protection_active", false))) render()
+                } else if (verifyRecoveryCode(entered)) {
+                    if (setProtection(false)) {
+                        prefs.edit()
+                            .remove("pin_salt").remove("pin_hash")
+                            .remove("recovery_salt").remove("recovery_hash")
+                            .apply()
+                        Toast.makeText(this, "Recovery accepted. Create a new administrator PIN.", Toast.LENGTH_LONG).show()
+                        render()
+                    }
                 } else {
-                    setProtection(!prefs.getBoolean("protection_active", false))
-                    render()
+                    Toast.makeText(this, "Incorrect PIN or recovery code.", Toast.LENGTH_SHORT).show()
                 }
             }
         } else {
@@ -106,10 +125,10 @@ class MainActivity : Activity() {
         label("Guardian • DPC build 2.0", 12f, 0xFF829AB1.toInt())
     }
 
-    private fun setProtection(enabled: Boolean) {
+    private fun setProtection(enabled: Boolean): Boolean {
         if (!dpm.isDeviceOwnerApp(packageName)) {
             Toast.makeText(this, "Guardian is not Device Owner.", Toast.LENGTH_LONG).show()
-            return
+            return false
         }
         try {
             if (enabled) {
@@ -123,15 +142,32 @@ class MainActivity : Activity() {
             }
             prefs.edit().putBoolean("protection_active", enabled).apply()
             Toast.makeText(this, if (enabled) "Installation restrictions enabled." else "Installation restrictions disabled.", Toast.LENGTH_LONG).show()
+            return true
         } catch (e: Exception) {
             Toast.makeText(this, "Could not apply policy: ${e.message}", Toast.LENGTH_LONG).show()
+            return false
         }
     }
 
-    private fun savePin(pin: String) {
+    private fun savePin(pin: String): String {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        prefs.edit().putString("pin_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
-            .putString("pin_hash", hash(pin, salt)).apply()
+        val recoveryCode = buildString { repeat(16) { append(SecureRandom().nextInt(10)) } }
+        val recoverySalt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        prefs.edit()
+            .putString("pin_salt", Base64.encodeToString(salt, Base64.NO_WRAP))
+            .putString("pin_hash", hash(pin, salt))
+            .putString("recovery_salt", Base64.encodeToString(recoverySalt, Base64.NO_WRAP))
+            .putString("recovery_hash", hash(recoveryCode, recoverySalt))
+            .apply()
+        return recoveryCode
+    }
+
+    private fun verifyRecoveryCode(code: String): Boolean {
+        if (code.length != 16 || code.any { !it.isDigit() }) return false
+        val saltText = prefs.getString("recovery_salt", null) ?: return false
+        val expected = prefs.getString("recovery_hash", null) ?: return false
+        val salt = Base64.decode(saltText, Base64.NO_WRAP)
+        return MessageDigest.isEqual(hash(code, salt).toByteArray(), expected.toByteArray())
     }
     private fun verifyPin(pin: String): Boolean {
         val saltText = prefs.getString("pin_salt", null) ?: return false
