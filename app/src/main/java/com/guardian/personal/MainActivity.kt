@@ -101,7 +101,8 @@ class MainActivity : Activity() {
                 }
             }
         } else if (owner) {
-            val pin = pinInput("Administrator PIN")
+            label("Enter your 6–12 digit administrator PIN, or your 16-digit recovery code if you need to reset it.", 14f, 0xFF334E68.toInt())
+            val pin = pinInput("PIN or recovery code")
             button(if (prefs.getBoolean("protection_active", false)) "Turn protection OFF" else "Turn protection ON") {
                 val entered = pin.text.toString()
                 if (verifyPin(entered)) {
